@@ -14,6 +14,23 @@ from agentops_assessment.rag.search import KnowledgeIndex
 ToolCallable = Callable[[dict[str, Any]], dict[str, Any]]
 
 
+# 工具到所需权限的映射
+TOOL_PERMISSIONS: dict[str, str] = {
+    "erp.get_inventory": "erp:read",
+    "bi.get_sales": "bi:read",
+    "knowledge.search": "knowledge:read",
+    "supplier.get_risk": "supplier:read",
+    "oa.create_approval_draft": "oa:approval:write",
+}
+
+
+# 不得出现在任何输出中的敏感字段
+SENSITIVE_TOOL_FIELDS = {
+    "vendor_secret", "unit_cost_usd",
+    "debug", "candidate_note",
+}
+
+
 class ToolRegistry:
     def __init__(self, retry_attempts: int = 1) -> None:
         self.retry_attempts = retry_attempts
@@ -56,6 +73,13 @@ class ToolRegistry:
         return registry
 
     def call(self, name: str, args: dict[str, Any]) -> dict[str, Any]:
+        """调用工具并对输出脱敏。"""
+        result = self._call_raw(name, args)
+        if isinstance(result, dict):
+            result = {k: v for k, v in result.items() if k not in SENSITIVE_TOOL_FIELDS}
+        return result
+
+    def _call_raw(self, name: str, args: dict[str, Any]) -> dict[str, Any]:
         if name not in self._tools:
             raise KeyError(f"未知工具: {name}")
 
